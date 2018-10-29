@@ -19,6 +19,7 @@ defmodule LibclusterECS.MixProject do
 
   defp deps do
     [
+      {:libcluster, "~> 3.0"},
       {:mix_test_watch, "~> 0.9", only: :dev, runtime: false}
     ]
   end
