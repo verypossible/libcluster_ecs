@@ -1,21 +1,19 @@
 # LibclusterECS
 
-**TODO: Add description**
+ECS strategy for [libcluster]
+
+Currently supports clustering within a service. Makes use of the [Task Metadata
+Endpoint] to resolve the current cluster, service, and task.
 
 ## Installation
-
-If [available in Hex](https://hex.pm/docs/publish), the package can be installed
-by adding `libcluster_ecs` to your list of dependencies in `mix.exs`:
 
 ```elixir
 def deps do
   [
-    {:libcluster_ecs, "~> 0.1.0"}
+    {:libcluster_ecs, github: "verypossible/libcluster_ecs"}
   ]
 end
 ```
 
-Documentation can be generated with [ExDoc](https://github.com/elixir-lang/ex_doc)
-and published on [HexDocs](https://hexdocs.pm). Once published, the docs can
-be found at [https://hexdocs.pm/libcluster_ecs](https://hexdocs.pm/libcluster_ecs).
-
+[libcluster]: https://github.com/bitwalker/libcluster
+[Task Metadata Endpoint]: https://docs.aws.amazon.com/AmazonECS/latest/developerguide/task-metadata-endpoint.html
