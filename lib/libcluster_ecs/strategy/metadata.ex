@@ -128,7 +128,7 @@ defmodule ClusterECS.Strategy.Metadata do
     with {:ok, task_arns} <- ECS.list_task_arns(region, cluster_arn, service_name, opts),
          other_task_arns <- Enum.reject(task_arns, &(&1 == current_task_arn)),
          {:ok, tasks} <- ECS.describe_task_arns(region, cluster_arn, other_task_arns, opts) do
-      nodes = for task <- tasks, do: :"#{service_name}@#{ECS.hostname_from_task(region, task)}"
+      nodes = for task <- tasks, do: :"app@#{ECS.hostname_from_task(region, task)}"
 
       MapSet.new(nodes)
     else
