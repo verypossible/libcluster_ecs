@@ -7,7 +7,7 @@ alias ClusterECS.Test.TeslaWrapper
 config :tesla, adapter: Hackney
 
 if Mix.env() == :test do
-  config :tesla, adapter: Tesla.Mock
+  config :tesla, adapter: Mock
 
   config :ex_aws,
     access_key_id: "test_key",

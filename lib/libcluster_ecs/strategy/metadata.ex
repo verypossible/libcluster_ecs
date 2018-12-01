@@ -20,12 +20,29 @@ defmodule ClusterECS.Strategy.Metadata do
   def start_link(args), do: GenServer.start_link(__MODULE__, args)
 
   @impl GenServer
-  def init([%State{meta: %{service_name: _, cluster_arn: _, region: _, nodes: _}} = state]) do
-    {:ok, load(state)}
+  def init([state]) do
+    send(self(), :load)
+    {:ok, state}
   end
 
-  def init([%State{topology: topology} = state]) do
-    meta =
+  @impl GenServer
+  def handle_info(:load, %State{} = state), do: {:noreply, load(state)}
+
+  defp load(%State{meta: %{service_name: _, cluster_arn: _, region: _, nodes: _}} = state) do
+    {:ok, reported_nodes} = get_nodes(state)
+
+    nodes =
+      reported_nodes
+      |> MapSet.new()
+      |> disconnect_nodes(state)
+      |> connect_nodes(state)
+
+    Process.send_after(self(), :load, polling_interval(state))
+    put_in(state.meta.nodes, nodes)
+  end
+
+  defp load(%State{topology: topology, meta: meta} = state) do
+    new_meta =
       with {:ok, %{cluster_arn: cluster_arn, task_arn: task_arn}} <- MetadataEndpoint.get(:v2),
            {:ok, region} <- AWS.region_from_arn(task_arn),
            {:ok, service_name} <- ECS.service_name_from_task(region, cluster_arn, task_arn) do
@@ -43,35 +60,23 @@ defmodule ClusterECS.Strategy.Metadata do
             "cannot query ECS Task Metadata Endpoint (#{status}): #{inspect(body)}"
           )
 
+          meta
+
         {:error, {module, function}} ->
           Cluster.Logger.error(topology, "#{inspect({module, function})} failed!")
+          meta
 
         {:error, {module, function, error}} ->
           Cluster.Logger.error(
             topology,
             "#{inspect({module, function})} failed!: #{inspect(error)}"
           )
+
+          meta
       end
 
-    init([%State{state | :meta => meta}])
-  end
-
-  @impl GenServer
-  def handle_info(:load, %State{} = state) do
-    {:noreply, load(state)}
-  end
-
-  defp load(state) do
-    {:ok, reported_nodes} = get_nodes(state)
-
-    nodes =
-      reported_nodes
-      |> MapSet.new()
-      |> disconnect_nodes(state)
-      |> connect_nodes(state)
-
     Process.send_after(self(), :load, polling_interval(state))
-    put_in(state.meta.nodes, nodes)
+    %{state | meta: new_meta}
   end
 
   defp disconnect_nodes(desired_nodes, state) do

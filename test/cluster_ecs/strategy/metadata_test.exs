@@ -31,49 +31,59 @@ defmodule ClusterECS.Strategy.MetadataTest do
     assert {:ok, pid} = Metadata.start_link([build_state()])
   end
 
-  test "init/1" do
-    region = Factory.build(:region)
-    ecs_url = "https://ecs.#{region}.amazonaws.com/"
-    metadata_endpoint_url = MetadataEndpoint.url(:v2)
-    service_name = "my_service"
-    cluster_arn = Factory.build(:cluster_arn, %{region: region})
+  describe "init/1" do
+    test "happy path" do
+      region = Factory.build(:region)
+      ecs_url = "https://ecs.#{region}.amazonaws.com/"
+      metadata_endpoint_url = MetadataEndpoint.url(:v2)
+      service_name = "my_service"
+      cluster_arn = Factory.build(:cluster_arn, %{region: region})
 
-    %{taskArn: task_arn} =
-      task = Factory.build(:task, %{service_name: service_name, region: region})
+      %{taskArn: task_arn} =
+        task = Factory.build(:task, %{service_name: service_name, region: region})
 
-    mock_global(fn
-      %{method: :get, url: ^metadata_endpoint_url} ->
-        payload = %{TaskARN: task_arn, Cluster: cluster_arn}
-        {:ok, json(payload)}
+      mock_global(fn
+        %{method: :get, url: ^metadata_endpoint_url} ->
+          payload = %{TaskARN: task_arn, Cluster: cluster_arn}
+          {:ok, json(payload)}
 
-      %{body: body, headers: headers, method: :post, url: ^ecs_url} ->
-        case Factory.aws_request_target(headers) do
-          "DescribeTasks" ->
-            case Jason.decode!(body) do
-              %{"tasks" => []} -> {:ok, json(%{tasks: []})}
-              %{"tasks" => [^task_arn]} -> {:ok, json(%{tasks: [task]})}
-            end
+        %{body: body, headers: headers, method: :post, url: ^ecs_url} ->
+          case Factory.aws_request_target(headers) do
+            "DescribeTasks" ->
+              case Jason.decode!(body) do
+                %{"tasks" => []} -> {:ok, json(%{tasks: []})}
+                %{"tasks" => [^task_arn]} -> {:ok, json(%{tasks: [task]})}
+              end
 
-          "ListTasks" ->
-            payload = %{taskArns: [task_arn]}
-            {:ok, json(payload)}
-        end
-    end)
+            "ListTasks" ->
+              payload = %{taskArns: [task_arn]}
+              {:ok, json(payload)}
+          end
+      end)
 
-    state = build_state()
+      state = build_state()
 
-    expected_state = %{
-      state
-      | meta: %{
-          nodes: MapSet.new([]),
-          cluster_arn: cluster_arn,
-          region: region,
-          service_name: service_name,
-          task_arn: task_arn
-        }
-    }
+      expected_state = %{
+        state
+        | meta: %{
+            nodes: MapSet.new([]),
+            cluster_arn: cluster_arn,
+            region: region,
+            service_name: service_name,
+            task_arn: task_arn
+          }
+      }
 
-    assert {:ok, ^expected_state} = Metadata.init([state])
+      assert {:ok, ^expected_state} = Metadata.init([state])
+    end
+
+    @tag timeout: 5_000
+    test "init does not recurse infinitely when endpoint unavailable" do
+      metadata_endpoint_url = MetadataEndpoint.url(:v2)
+      mock_global(fn %{method: :get, url: ^metadata_endpoint_url} -> {:error, :econnrefused} end)
+      state = build_state()
+      assert Metadata.init([state]) == {:ok, state}
+    end
   end
 
   defp build_state() do
