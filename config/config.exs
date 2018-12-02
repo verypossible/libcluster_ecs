@@ -6,6 +6,8 @@ alias ClusterECS.Test.TeslaWrapper
 # this configuration.
 config :tesla, adapter: Hackney
 
+if Mix.env() == :dev, do: config(:mix_test_watch, clear: true)
+
 if Mix.env() == :test do
   config :tesla, adapter: Mock
 

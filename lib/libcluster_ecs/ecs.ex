@@ -49,7 +49,11 @@ defmodule ClusterECS.ECS do
   @spec describe_task_arns(region(), cluster_arn(), [task_arn()], opts()) ::
           {:ok, [task()]}
           | {:error, {__MODULE__, :list_task_arns, any()}}
-  def describe_task_arns(region, cluster_arn, task_arns, opts \\ %{}) do
+  def describe_task_arns(region, cluster_arn, task_arns, opts \\ %{})
+
+  def describe_task_arns(_, _, [], _), do: {:ok, []}
+
+  def describe_task_arns(region, cluster_arn, task_arns, opts) do
     cluster_arn
     |> ExAws.ECS.describe_tasks(task_arns)
     |> ExAws.request(Enum.into([json_codec: Jason, region: region], opts))

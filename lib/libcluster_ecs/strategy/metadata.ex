@@ -29,10 +29,9 @@ defmodule ClusterECS.Strategy.Metadata do
   def handle_info(:load, %State{} = state), do: {:noreply, load(state)}
 
   defp load(%State{meta: %{service_name: _, cluster_arn: _, region: _, nodes: _}} = state) do
-    {:ok, reported_nodes} = get_nodes(state)
-
     nodes =
-      reported_nodes
+      state
+      |> get_nodes()
       |> MapSet.new()
       |> disconnect_nodes(state)
       |> connect_nodes(state)
@@ -73,7 +72,7 @@ defmodule ClusterECS.Strategy.Metadata do
         {:error, {module, function, error}} ->
           Cluster.Logger.error(
             topology,
-            "#{inspect({module, function})} failed!: #{inspect(error)}"
+            "#{inspect({module, function})} failed: #{inspect(error)}"
           )
 
           meta
@@ -118,7 +117,8 @@ defmodule ClusterECS.Strategy.Metadata do
            region: region,
            service_name: service_name,
            task_arn: current_task_arn
-         }
+         },
+         topology: topology
        }) do
     opts =
       config
@@ -128,12 +128,17 @@ defmodule ClusterECS.Strategy.Metadata do
     with {:ok, task_arns} <- ECS.list_task_arns(region, cluster_arn, service_name, opts),
          other_task_arns <- Enum.reject(task_arns, &(&1 == current_task_arn)),
          {:ok, tasks} <- ECS.describe_task_arns(region, cluster_arn, other_task_arns, opts) do
-      nodes =
-        for task <- tasks, do: :"#{service_name}@#{ECS.hostname_from_task(region, task, opts)}"
+      nodes = for task <- tasks, do: :"#{service_name}@#{ECS.hostname_from_task(region, task)}"
 
-      {:ok, MapSet.new(nodes)}
+      MapSet.new(nodes)
     else
-      {:error, _} = e -> e
+      {:error, _} = e ->
+        Cluster.Logger.error(
+          topology,
+          "#{inspect({__MODULE__, :get_nodes})} failed: #{inspect(e)}"
+        )
+
+        MapSet.new([])
     end
   end
 
