@@ -41,11 +41,15 @@ defmodule ClusterECS.Strategy.Metadata do
     put_in(state.meta.nodes, nodes)
   end
 
-  defp load(%State{topology: topology, meta: meta} = state) do
+  defp load(%State{config: config, topology: topology, meta: meta} = state) do
     new_meta =
       with {:ok, %{cluster_arn: cluster_arn, task_arn: task_arn}} <- MetadataEndpoint.get(:v2),
            {:ok, region} <- AWS.region_from_arn(task_arn),
-           {:ok, service_name} <- ECS.service_name_from_task(region, cluster_arn, task_arn) do
+           opts <-
+             config
+             |> Enum.into(%{})
+             |> Map.take([:access_key_id, :secret_access_key]),
+           {:ok, service_name} <- ECS.service_name_from_task(region, cluster_arn, task_arn, opts) do
         %{
           cluster_arn: cluster_arn,
           nodes: MapSet.new([]),
@@ -107,20 +111,26 @@ defmodule ClusterECS.Strategy.Metadata do
     end
   end
 
-  defp get_nodes(
-         %State{
-           meta: %{
-             cluster_arn: cluster_arn,
-             region: region,
-             service_name: service_name,
-             task_arn: current_task_arn
-           }
-         } = state
-       ) do
-    with {:ok, task_arns} <- ECS.list_task_arns(region, cluster_arn, service_name),
+  defp get_nodes(%State{
+         config: config,
+         meta: %{
+           cluster_arn: cluster_arn,
+           region: region,
+           service_name: service_name,
+           task_arn: current_task_arn
+         }
+       }) do
+    opts =
+      config
+      |> Enum.into(%{})
+      |> Map.take([:access_key_id, :secret_access_key])
+
+    with {:ok, task_arns} <- ECS.list_task_arns(region, cluster_arn, service_name, opts),
          other_task_arns <- Enum.reject(task_arns, &(&1 == current_task_arn)),
-         {:ok, tasks} <- ECS.describe_task_arns(region, cluster_arn, other_task_arns) do
-      nodes = for task <- tasks, do: :"#{service_name}@#{ECS.hostname_from_task(region, task)}"
+         {:ok, tasks} <- ECS.describe_task_arns(region, cluster_arn, other_task_arns, opts) do
+      nodes =
+        for task <- tasks, do: :"#{service_name}@#{ECS.hostname_from_task(region, task, opts)}"
+
       {:ok, MapSet.new(nodes)}
     else
       {:error, _} = e -> e

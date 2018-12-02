@@ -31,13 +31,14 @@ defmodule ClusterECS.Strategy.MetadataTest do
     assert {:ok, pid} = Metadata.start_link([build_state()])
   end
 
-  describe "init/1" do
-    test "happy path" do
+  describe "handle_info/2" do
+    test "initial call - happy path" do
       region = Factory.build(:region)
       ecs_url = "https://ecs.#{region}.amazonaws.com/"
       metadata_endpoint_url = MetadataEndpoint.url(:v2)
       service_name = "my_service"
       cluster_arn = Factory.build(:cluster_arn, %{region: region})
+      state = build_state()
 
       %{taskArn: task_arn} =
         task = Factory.build(:task, %{service_name: service_name, region: region})
@@ -61,8 +62,6 @@ defmodule ClusterECS.Strategy.MetadataTest do
           end
       end)
 
-      state = build_state()
-
       expected_state = %{
         state
         | meta: %{
@@ -74,16 +73,22 @@ defmodule ClusterECS.Strategy.MetadataTest do
           }
       }
 
-      assert {:ok, ^expected_state} = Metadata.init([state])
+      assert Metadata.handle_info(:load, state) == {:noreply, expected_state}
     end
 
-    @tag timeout: 5_000
-    test "init does not recurse infinitely when endpoint unavailable" do
+    test "initial call - metadata endpoint unavailable" do
       metadata_endpoint_url = MetadataEndpoint.url(:v2)
-      mock_global(fn %{method: :get, url: ^metadata_endpoint_url} -> {:error, :econnrefused} end)
       state = build_state()
-      assert Metadata.init([state]) == {:ok, state}
+
+      mock_global(fn %{method: :get, url: ^metadata_endpoint_url} -> {:error, :econnrefused} end)
+      assert Metadata.handle_info(:load, state) == {:noreply, state}
     end
+  end
+
+  test "init/1" do
+    state = build_state()
+    assert {:ok, ^state} = Metadata.init([state])
+    assert_receive :load
   end
 
   defp build_state() do
