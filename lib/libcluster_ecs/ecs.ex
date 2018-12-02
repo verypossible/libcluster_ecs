@@ -72,9 +72,11 @@ defmodule ClusterECS.ECS do
     %{network_interfaces: [%{private_ipv4_address: ip} | _]} =
       Enum.find(containers, &(&1.task_arn == task_arn))
 
+    dashed_ip = String.replace(ip, ".", "-")
+
     case region do
-      "us-east-1" -> "ip-#{ip}.ec2.internal"
-      region -> "ip-#{ip}.#{region}.compute.internal"
+      "us-east-1" -> "ip-#{dashed_ip}.ec2.internal"
+      region -> "ip-#{dashed_ip}.#{region}.compute.internal"
     end
   end
 
