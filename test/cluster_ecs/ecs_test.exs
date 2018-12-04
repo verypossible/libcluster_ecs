@@ -86,4 +86,34 @@ defmodule ClusterECS.ECSTest do
                })
     end
   end
+
+  describe "hostname_from_task/2" do
+    test "us-east-1 region" do
+      region = "us-east-1"
+      task_arn = Factory.build(:task_arn)
+      ip = Factory.build(:ipv4)
+      dashed_ip = String.replace(ip, ".", "-")
+
+      task = %{
+        task_arn: task_arn,
+        containers: [%{task_arn: task_arn, network_interfaces: [%{private_ipv4_address: ip}]}]
+      }
+
+      assert ECS.hostname_from_task(region, task) == "ip-#{dashed_ip}.ec2.internal"
+    end
+
+    test "another region" do
+      region = "us-east-2"
+      task_arn = Factory.build(:task_arn)
+      ip = Factory.build(:ipv4)
+      dashed_ip = String.replace(ip, ".", "-")
+
+      task = %{
+        task_arn: task_arn,
+        containers: [%{task_arn: task_arn, network_interfaces: [%{private_ipv4_address: ip}]}]
+      }
+
+      assert ECS.hostname_from_task(region, task) == "ip-#{dashed_ip}.#{region}.compute.internal"
+    end
+  end
 end
