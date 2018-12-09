@@ -40,15 +40,11 @@ defmodule ClusterECS.Strategy.Metadata do
     put_in(state.meta.nodes, nodes)
   end
 
-  defp load(%State{config: config, topology: topology, meta: meta} = state) do
+  defp load(%State{topology: topology, meta: meta} = state) do
     new_meta =
       with {:ok, %{cluster_arn: cluster_arn, task_arn: task_arn}} <- MetadataEndpoint.get(:v2),
            {:ok, region} <- AWS.region_from_arn(task_arn),
-           opts <-
-             config
-             |> Enum.into(%{})
-             |> Map.take([:access_key_id, :secret_access_key]),
-           {:ok, service_name} <- ECS.service_name_from_task(region, cluster_arn, task_arn, opts) do
+           {:ok, service_name} <- ECS.service_name_from_task(region, cluster_arn, task_arn) do
         %{
           cluster_arn: cluster_arn,
           nodes: MapSet.new([]),
@@ -111,7 +107,6 @@ defmodule ClusterECS.Strategy.Metadata do
   end
 
   defp get_nodes(%State{
-         config: config,
          meta: %{
            cluster_arn: cluster_arn,
            region: region,
@@ -120,14 +115,9 @@ defmodule ClusterECS.Strategy.Metadata do
          },
          topology: topology
        }) do
-    opts =
-      config
-      |> Enum.into(%{})
-      |> Map.take([:access_key_id, :secret_access_key])
-
-    with {:ok, task_arns} <- ECS.list_task_arns(region, cluster_arn, service_name, opts),
+    with {:ok, task_arns} <- ECS.list_task_arns(region, cluster_arn, service_name),
          other_task_arns <- Enum.reject(task_arns, &(&1 == current_task_arn)),
-         {:ok, tasks} <- ECS.describe_task_arns(region, cluster_arn, other_task_arns, opts) do
+         {:ok, tasks} <- ECS.describe_task_arns(region, cluster_arn, other_task_arns) do
       nodes = for task <- tasks, do: :"app@#{ECS.hostname_from_task(region, task)}"
 
       MapSet.new(nodes)
